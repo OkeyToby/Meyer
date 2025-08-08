@@ -1,0 +1,433 @@
+<!DOCTYPE html>
+<html lang="da">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Meyer – Pass&Play</title>
+  <style>
+    html, body { margin:0; padding:0; font-family: system-ui, -apple-system, Segoe UI, Roboto, Helvetica, Arial, sans-serif; background:#0f1220; color:#eef2ff; }
+    .app { max-width: 720px; margin: 0 auto; padding: 16px; }
+    h1 { font-size: 22px; margin: 8px 0 12px; text-align:center;}
+    .card { background:#161a2f; border:1px solid #23294a; border-radius: 16px; padding: 14px; box-shadow: 0 6px 20px rgba(0,0,0,.25); margin-bottom:12px;}
+    label { display:block; font-size:14px; opacity:.9; margin-bottom:6px;}
+    input, button, select { width:100%; padding:12px; border-radius:12px; border:1px solid #2a305a; background:#0e1230; color:#eef2ff; font-size:16px; }
+    input::placeholder { color:#9aa3c1; }
+    button { background:#3b82f6; border:none; font-weight:600; }
+    button.secondary { background:#243157; }
+    button.warn { background:#ef4444; }
+    button:disabled { opacity:.5; }
+    .grid { display:grid; gap:10px; }
+    .g2 { grid-template-columns: 1fr 1fr; }
+    .g3 { grid-template-columns: 1fr 1fr 1fr; }
+    .row { display:flex; gap:10px; align-items:center; }
+    .pill { background:#0d1438; border:1px solid #2a305a; padding:6px 10px; border-radius:999px; font-size:13px; white-space:nowrap; }
+    .center { text-align:center; }
+    .muted { opacity:.8; font-size:14px;}
+    .big { font-size:42px; font-weight:800; letter-spacing:1px; }
+    .dice { display:flex; gap:16px; justify-content:center; margin:12px 0; }
+    .die { width:64px; height:64px; background:#0b1028; border:2px solid #2c3364; border-radius:12px; display:grid; place-items:center; font-size:28px; font-weight:700; }
+    .hidden { filter: blur(8px); }
+    .ok { color:#22c55e; }
+    .bad { color:#ef4444; }
+    .list { display:flex; gap:8px; flex-wrap:wrap; }
+    .tag { background:#0b1028; border:1px solid #2a305a; border-radius: 10px; padding:6px 10px; font-size:13px; }
+    .footer { text-align:center; opacity:.7; font-size:12px; margin-top:10px;}
+    .overlay { position:fixed; inset:0; background:#0b1028; display:none; align-items:center; justify-content:center; z-index:99; }
+    .overlay.show { display:flex; }
+    .overlay .bubble { text-align:center; padding:22px; max-width:480px; }
+    .spacer { height:8px; }
+    .table { width:100%; border-collapse:collapse; }
+    .table th, .table td { border-bottom:1px solid #2a305a; padding:8px; text-align:left; }
+    .sr-only { position:absolute; left:-9999px; width:1px; height:1px; overflow:hidden; }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <h1>🎲 Meyer – Pass &amp; Play</h1>
+    <div id="screen-setup" class="card">
+      <label for="names">Spillernavne (kommasepareret)</label>
+      <input id="names" placeholder="fx: Tobias, Oliver, Laura" />
+      <div class="spacer"></div>
+      <div class="grid g2">
+        <div>
+          <label for="lives">Liv pr. spiller</label>
+          <select id="lives">
+            <option>3</option>
+            <option selected>6</option>
+            <option>9</option>
+          </select>
+        </div>
+        <div>
+          <label for="meyer2">Meyer taber 2 liv?</label>
+          <select id="meyer2">
+            <option selected>Ja</option>
+            <option>Nej</option>
+          </select>
+        </div>
+      </div>
+      <div class="spacer"></div>
+      <button id="start">Start spil</button>
+      <div class="spacer"></div>
+      <p class="muted">Regler (kort): 21 = Meyer (øverst), 31 = Lille Meyer, derefter par 66 → 11, så 65 → 32. Taber mister 1 liv (2 ved Meyer hvis valgt). Pass‑and‑play med skjulte slag og påstande.</p>
+    </div>
+
+    <div id="screen-game" class="card" style="display:none;">
+      <div class="row">
+        <div class="pill">Runde: <span id="round">1</span></div>
+        <div class="pill">Forrige påstand: <span id="prevClaim">—</span></div>
+        <div class="pill">Tur: <span id="turnName">—</span></div>
+      </div>
+
+      <div class="spacer"></div>
+
+      <table class="table" id="playersTable" aria-label="Spillerliv"></table>
+
+      <div class="card" style="background:#0b1028; border-color:#2a305a; margin:12px -2px;">
+        <div class="center">
+          <div class="muted">Dit skjulte slag</div>
+          <div class="dice">
+            <div class="die" id="d1">?</div>
+            <div class="die" id="d2">?</div>
+          </div>
+          <div id="yourRoll" class="muted">—</div>
+        </div>
+        <div class="spacer"></div>
+        <div class="grid g2">
+          <button id="btnHide" class="secondary">Skjul &amp; giv videre</button>
+          <button id="btnRoll">Slå (skjult)</button>
+        </div>
+        <div class="spacer"></div>
+        <label for="claim">Din påstand (skal være ≥ forrige)</label>
+        <select id="claim"></select>
+        <div class="spacer"></div>
+        <div class="grid g2">
+          <button id="btnClaim" disabled>Bekræft påstand &amp; giv videre</button>
+          <button id="btnCall" class="warn">Kald bluff!</button>
+        </div>
+      </div>
+
+      <div class="card" style="background:#0b1028; border-color:#2a305a;">
+        <div class="center">
+          <div class="muted">Næste spiller kan vælge:</div>
+          <div class="grid g3">
+            <button id="btnBelieve" class="secondary">Tro på &amp; slå</button>
+            <button id="btnPass" class="secondary">Spring påstand over</button>
+            <button id="btnShow" class="secondary">Vis sidste slag</button>
+          </div>
+          <p class="muted">Tip: Brug “Skjul &amp; giv videre” ved aflevering, så næste spiller ikke ser slaget.</p>
+        </div>
+      </div>
+
+      <div id="log" class="muted"></div>
+    </div>
+
+    <div class="footer">Lavt af dig 😉 – klar til Glide via Web View.</div>
+  </div>
+
+  <div id="overlay" class="overlay" role="dialog" aria-modal="true">
+    <div class="bubble">
+      <h2>Skærmen er skjult</h2>
+      <p>Giv telefonen til næste spiller. Tryk for at fortsætte.</p>
+      <button id="btnResume">Fortsæt</button>
+    </div>
+  </div>
+
+<script>
+// --- Meyer logic & UI ---
+const order = (() => {
+  // Build full hand order: "21" (Meyer), "31" (Lille Meyer), pairs 66..11, then 65..32
+  const seq = [];
+  seq.push("21"); // Meyer
+  seq.push("31"); // Lille Meyer
+  for (let p = 6; p >= 1; p--) seq.push("" + p + p);
+  for (let hi = 6; hi >= 3; hi--) {
+    for (let lo = 5; lo >= 2; lo--) {
+      if (hi === lo) continue;
+      const tens = Math.max(hi, lo);
+      const ones = Math.min(hi, lo);
+      const val = "" + tens + ones;
+      if (val === "65") {
+        // start from 65 down to 32 inclusive
+        // ensure we cover all non-pairs except 43,42? Actually standard is 65-32
+      }
+      if (tens >= 3 && !(tens === 3 && ones < 2)) {
+        if (!(tens === 3 && ones === 1)) { // exclude 31 (already added)
+          seq.push(val);
+        }
+      }
+    }
+  }
+  // Filter only valid non-pair from 65 to 32 (descending) - remove anything outside
+  const wanted = new Set(["65","64","63","62","54","53","52","43","42","32"]);
+  const filtered = seq.slice(0,2).concat(seq.slice(2).filter(v => v[0]===v[1] || wanted.has(v)));
+  // Deduplicate while preserving order
+  const seen = new Set();
+  const final = [];
+  for (const v of filtered) {
+    if (!seen.has(v)) { seen.add(v); final.push(v); }
+  }
+  return final;
+})();
+
+function rankOf(val) { return order.indexOf(val); }
+function rollDice() {
+  const a = 1 + Math.floor(Math.random()*6);
+  const b = 1 + Math.floor(Math.random()*6);
+  const hi = Math.max(a,b), lo = Math.min(a,b);
+  const v = "" + hi + lo;
+  return {a:hi, b:lo, val:v, rank: rankOf(v)};
+}
+function formatVal(v) {
+  if (v==="21") return "Meyer (21)";
+  if (v==="31") return "Lille Meyer (31)";
+  if (v[0]===v[1]) return v + " (par)";
+  return v;
+}
+
+const EL = id => document.getElementById(id);
+const screenSetup = EL("screen-setup");
+const screenGame = EL("screen-game");
+const playersTable = EL("playersTable");
+const prevClaim = EL("prevClaim");
+const turnName = EL("turnName");
+const roundEl = EL("round");
+const d1 = EL("d1"), d2 = EL("d2"), yourRoll = EL("yourRoll");
+const claimSel = EL("claim");
+const btnStart = EL("start");
+const btnRoll = EL("btnRoll");
+const btnHide = EL("btnHide");
+const btnClaim = EL("btnClaim");
+const btnCall = EL("btnCall");
+const btnBelieve = EL("btnBelieve");
+const btnPass = EL("btnPass");
+const btnShow = EL("btnShow");
+const log = EL("log");
+const overlay = EL("overlay");
+const btnResume = EL("btnResume");
+
+let state = {
+  players: [], // [{name, lives, out:false}]
+  turn: 0,
+  round: 1,
+  baseLives: 6,
+  meyerCostsTwo: true,
+  lastRoll: null,   // {val, rank}
+  lastClaimer: null,// index of player who made the claim
+  currentClaim: null // string like "54"
+};
+
+function rebuildClaimOptions(minRank) {
+  claimSel.innerHTML = "";
+  const opts = order.filter((_,i)=> i >= (minRank ?? 0)).map(v => ({v, label:formatVal(v)}));
+  for (const o of opts) {
+    const op = document.createElement("option");
+    op.value = o.v; op.textContent = o.label;
+    claimSel.appendChild(op);
+  }
+  btnClaim.disabled = (opts.length === 0);
+}
+
+function renderPlayers() {
+  const rows = [`<tr><th>Spiller</th><th>Liv</th><th>Status</th></tr>`];
+  state.players.forEach((p,i)=>{
+    const here = (i===state.turn) ? " (tur)" : "";
+    rows.push(`<tr><td>${p.name}${here}</td><td>${p.lives}</td><td>${p.out ? "🪦 Ude" : "🟢 Med"}</td></tr>`);
+  });
+  playersTable.innerHTML = rows.join("");
+}
+
+function nextAlive(idx, dir=1) {
+  const n = state.players.length;
+  for (let step=1; step<=n; step++) {
+    const j = (idx + dir*step + n) % n;
+    if (!state.players[j].out) return j;
+  }
+  return idx;
+}
+
+function countAlive() { return state.players.filter(p=>!p.out).length; }
+
+function updateTurnDisplay() {
+  turnName.textContent = state.players[state.turn]?.name ?? "—";
+  roundEl.textContent = state.round;
+  prevClaim.textContent = state.currentClaim ? formatVal(state.currentClaim) : "—";
+}
+
+function setDiceUI(roll, hidden=false) {
+  if (!roll) {
+    d1.textContent = "?"; d2.textContent = "?";
+    yourRoll.textContent = "—";
+    return;
+  }
+  d1.textContent = roll.val[0];
+  d2.textContent = roll.val[1];
+  if (hidden) {
+    d1.classList.add("hidden");
+    d2.classList.add("hidden");
+    yourRoll.textContent = "Skjult";
+  } else {
+    d1.classList.remove("hidden");
+    d2.classList.remove("hidden");
+    yourRoll.textContent = formatVal(roll.val);
+  }
+}
+
+function logLine(txt) {
+  const p = document.createElement("p");
+  p.textContent = txt;
+  log.prepend(p);
+}
+
+function eliminateIfZero(i) {
+  const p = state.players[i];
+  if (p.lives <= 0 && !p.out) {
+    p.out = true;
+    logLine(`❌ ${p.name} er ude af spillet.`);
+  }
+}
+
+function endIfWinner() {
+  if (countAlive() === 1) {
+    const champ = state.players.find(p=>!p.out);
+    alert(`🎉 ${champ.name} vandt!`);
+    logLine(`🏆 ${champ.name} vandt spillet.`);
+    // Reset round/claim for potential new game
+    state.currentClaim = null;
+    state.lastRoll = null;
+    setDiceUI(null);
+    prevClaim.textContent = "—";
+  }
+}
+
+function loseLives(i, n) {
+  state.players[i].lives -= n;
+  eliminateIfZero(i);
+  renderPlayers();
+  endIfWinner();
+}
+
+function startTurn(i) {
+  state.turn = i;
+  state.lastRoll = null;
+  rebuildClaimOptions(state.currentClaim ? rankOf(state.currentClaim) : 0);
+  setDiceUI(null);
+  updateTurnDisplay();
+}
+
+function startRound() {
+  state.round += 1;
+  state.currentClaim = null;
+  state.lastRoll = null;
+  setDiceUI(null);
+  rebuildClaimOptions(0);
+  prevClaim.textContent = "—";
+}
+
+function showOverlay() { overlay.classList.add("show"); }
+function hideOverlay() { overlay.classList.remove("show"); }
+
+// --- Event wiring ---
+btnStart.addEventListener("click", () => {
+  const names = document.getElementById("names").value.split(",").map(s=>s.trim()).filter(Boolean);
+  if (names.length < 2) {
+    alert("Mindst 2 spillere, tak.");
+    return;
+  }
+  state.baseLives = parseInt(document.getElementById("lives").value, 10);
+  state.meyerCostsTwo = (document.getElementById("meyer2").value === "Ja");
+  state.players = names.map(n => ({name:n, lives:state.baseLives, out:false}));
+  state.turn = 0;
+  state.round = 1;
+  state.currentClaim = null;
+  state.lastRoll = null;
+  state.lastClaimer = null;
+  screenSetup.style.display = "none";
+  screenGame.style.display = "block";
+  renderPlayers();
+  startTurn(0);
+  log.innerHTML = "";
+  logLine(`Spil startet: ${names.join(", ")} – ${state.baseLives} liv, Meyer taber ${state.meyerCostsTwo ? "2" : "1"}.`);
+});
+
+btnRoll.addEventListener("click", () => {
+  const r = rollDice();
+  state.lastRoll = r;
+  setDiceUI(r, false);
+});
+
+btnHide.addEventListener("click", () => showOverlay());
+btnResume.addEventListener("click", () => hideOverlay());
+
+btnClaim.addEventListener("click", () => {
+  const v = claimSel.value;
+  if (!v) return;
+  state.currentClaim = v;
+  state.lastClaimer = state.turn;
+  logLine(`🗣️ ${state.players[state.turn].name} påstår: ${formatVal(v)}`);
+  // Hand over to next player
+  const nxt = nextAlive(state.turn, +1);
+  startTurn(nxt);
+  showOverlay();
+});
+
+btnCall.addEventListener("click", () => {
+  if (!state.currentClaim || state.lastRoll === null) {
+    alert("Der er ingen gyldig påstand/slag at kalde på endnu.");
+    return;
+  }
+  const caller = state.turn;
+  const claimer = state.lastClaimer;
+  const truthful = state.lastRoll.rank <= rankOf(state.currentClaim); // lower index = better hand
+  const meyerHit = (state.currentClaim === "21");
+  const penalty = meyerHit && state.meyerCostsTwo ? 2 : 1;
+
+  if (truthful) {
+    // Caller loses
+    logLine(`📣 ${state.players[caller].name} kaldte bluff – men det var sandt (${formatVal(state.lastRoll.val)}). Mister ${penalty} liv.`);
+    loseLives(caller, penalty);
+  } else {
+    // Claimer loses
+    logLine(`📣 ${state.players[caller].name} kaldte bluff – korrekt! ${state.players[claimer].name} mister ${penalty} liv.`);
+    loseLives(claimer, penalty);
+  }
+  // New round starts with caller (if still alive), claim resets
+  startRound();
+  const startIdx = state.players[caller].out ? nextAlive(caller,+1) : caller;
+  startTurn(startIdx);
+  showOverlay();
+});
+
+btnBelieve.addEventListener("click", () => {
+  if (!state.currentClaim) { alert("Der er ingen påstand endnu."); return; }
+  // Player rolls and must claim >= previous claim (or pass claim forward unchanged)
+  const r = rollDice();
+  state.lastRoll = r;
+  setDiceUI(r, false);
+  rebuildClaimOptions(rankOf(state.currentClaim)); // same or higher
+});
+
+btnPass.addEventListener("click", () => {
+  // Pass turn without changing claim (useful for quick handover after you already har slået)
+  const nxt = nextAlive(state.turn, +1);
+  startTurn(nxt);
+  showOverlay();
+});
+
+btnShow.addEventListener("click", () => {
+  if (!state.lastRoll) { alert("Ingen sidste slag at vise."); return; }
+  alert(`Sidste slag: ${formatVal(state.lastRoll.val)}`);
+});
+
+claimSel.addEventListener("change", () => {
+  btnClaim.disabled = !claimSel.value;
+});
+
+// Initialize claim options
+rebuildClaimOptions(0);
+setDiceUI(null);
+renderPlayers();
+updateTurnDisplay();
+
+</script>
+</body>
+</html>
